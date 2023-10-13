@@ -29,7 +29,7 @@ def get_opts():
                         help='scene name, used as output folder name')
     parser.add_argument('--split', type=str, default='val',
                         choices=['val', 'test', 'test_train'])
-    parser.add_argument('--img_wh', nargs="+", type=int, default=[800, 800],
+    parser.add_argument('--img_wh', nargs="+", type=int, default=[540, 540],
                         help='resolution (img_w, img_h) of the image')
     # for phototourism
     parser.add_argument('--img_downscale', type=int, default=1,
@@ -120,6 +120,7 @@ if __name__ == "__main__":
     else:
         kwargs['img_downscale'] = args.img_downscale
         kwargs['use_cache'] = args.use_cache
+        kwargs['exp_name'] = args.scene_name
     dataset = dataset_dict[args.dataset_name](**kwargs)
     scene = os.path.basename(args.root_dir.strip('/'))
 
@@ -166,15 +167,15 @@ if __name__ == "__main__":
         dataset.test_K = np.array([[dataset.test_focal, 0, dataset.test_img_w/2],
                                    [0, dataset.test_focal, dataset.test_img_h/2],
                                    [0,                  0,                    1]])
-        if scene == 'brandenburg_gate':
+        if scene == 'train':
             # select appearance embedding, hard-coded for each scene
-            dataset.test_appearance_idx = 1123 # 85572957_6053497857.jpg
+            dataset.test_appearance_idx = 317 # 00486.png
             N_frames = 30*4
             dx = np.linspace(0, 0.03, N_frames)
             dy = np.linspace(0, -0.1, N_frames)
             dz = np.linspace(0, 0.5, N_frames)
             # define poses
-            dataset.poses_test = np.tile(dataset.poses_dict[1123], (N_frames, 1, 1))
+            dataset.poses_test = np.tile(dataset.poses_dict[dataset.test_appearance_idx], (N_frames, 1, 1))
             for i in range(N_frames):
                 dataset.poses_test[i, 0, 3] += dx[i]
                 dataset.poses_test[i, 1, 3] += dy[i]

@@ -6,14 +6,18 @@ def get_opts():
     parser.add_argument('--root_dir', type=str, required=True,
                         help='root directory of dataset')
     parser.add_argument('--dataset_name', type=str, default='blender',
-                        choices=['blender', 'phototourism'],
+                        choices=['blender', 'phototourism', 'llff'],
                         help='which dataset to train/val')
+    
+    # add mask
+    parser.add_argument('--mask_dir', type=str, default='', help='path to mask to be used')
+    
     # for blender
     parser.add_argument('--data_perturb', nargs="+", type=str, default=[],
                         help='''what perturbation to add to data.
                                 Available choices: [], ["color"], ["occ"] or ["color", "occ"]
                              ''')
-    parser.add_argument('--img_wh', nargs="+", type=int, default=[800, 800],
+    parser.add_argument('--img_wh', nargs="+", type=int, default=[1080, 1080],
                         help='resolution (img_w, img_h) of the image')
     # for phototourism
     parser.add_argument('--img_downscale', type=int, default=1,
