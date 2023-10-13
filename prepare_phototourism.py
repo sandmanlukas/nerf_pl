@@ -11,6 +11,7 @@ def get_opts():
                         help='root directory of dataset')
     parser.add_argument('--img_downscale', type=int, default=1,
                         help='how much to downscale the images for phototourism dataset')
+    parser.add_argument('--exp_name', type=str, help='experiment name', required=True)
 
     return parser.parse_args()
 
@@ -19,7 +20,7 @@ if __name__ == '__main__':
     args = get_opts()
     os.makedirs(os.path.join(args.root_dir, 'cache'), exist_ok=True)
     print(f'Preparing cache for scale {args.img_downscale}...')
-    dataset = PhototourismDataset(args.root_dir, 'train', args.img_downscale)
+    dataset = PhototourismDataset(args.root_dir, 'train', args.img_downscale, exp_name=args.exp_name)
     # save img ids
     with open(os.path.join(args.root_dir, f'cache/img_ids.pkl'), 'wb') as f:
         pickle.dump(dataset.img_ids, f, pickle.HIGHEST_PROTOCOL)

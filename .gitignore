@@ -1,7 +1,10 @@
 .vscode/
 logs/
+lightning_logs/
 ckpts/
 results/
+datasets/lego/
+nerf_pl/
 *.ply
 *.vol
 
@@ -134,3 +137,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Mac
+.DS_Store
