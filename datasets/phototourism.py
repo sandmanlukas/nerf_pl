@@ -126,21 +126,18 @@ class PhototourismDataset(Dataset):
             )
             for id_ in self.img_ids:
                 K = np.zeros((3, 3), dtype=np.float32)
-                # cam = camdata[1]
                 cam_id = self.image_to_cam[id_]
                 cam = camdata[cam_id]
                 img_w, img_h = int(cam.width), int(cam.height)
-                # img_w, img_h = 1080,1080
                 img_w_, img_h_ = (
                     img_w // self.img_downscale,
                     img_h // self.img_downscale,
                 )
                 K[0, 0] = cam.params[0] * img_w_ / img_w  # fx
-                K[1, 1] = cam.params[1] * img_h_ / img_h  # fy
-                K[0, 2] = cam.params[2] * img_w_ / img_w  # cx
-                K[1, 2] = cam.params[3] * img_h_ / img_h  # cy
+                K[1, 1] = cam.params[0] * img_h_ / img_h  # fy
+                K[0, 2] = cam.params[1] * img_w_ / img_w  # cx
+                K[1, 2] = cam.params[2] * img_h_ / img_h  # cy
                 K[2, 2] = 1
-                # self.Ks[id_] = K
                 self.Ks[cam_id] = K
 
         # Step 3: read c2w poses (of the images in tsv file only) and correct the order
