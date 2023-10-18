@@ -155,8 +155,12 @@ class NeRFSystem(LightningModule):
         if hparams.mask_dir:
             mask = mask.cuda()
             for k,v in results.items():
-                if k != 'beta':
-                    results[k] = v * (mask.view(v.shape) if len(v.shape) == 1 else mask[:, None] if len(v.shape) > 1 and len(mask.shape) == 1 else mask)
+                results[k] = v * (mask.view(v.shape) if len(v.shape) == 1 else mask[:, None] if len(v.shape) > 1 and len(mask.shape) == 1 else mask)
+                
+                if k == 'beta':                   
+                    # Add beta_min to beta to prevent NaN in loss calcs
+                    results[k] = torch.where(results[k] == 0, self.hparams.beta_min, results[k])
+
 
         loss_d = self.loss(results, rgbs)
         loss = sum(l for l in loss_d.values())
@@ -185,8 +189,11 @@ class NeRFSystem(LightningModule):
             mask = mask.flatten()[:,None].cuda()
 
             for k,v in results.items():
-                if k != 'beta':
-                    results[k] = v * (mask.view(v.shape) if len(v.shape) == 1 else mask[:, None] if len(v.shape) > 1 and len(mask.shape) == 1 else mask)
+                results[k] = v * (mask.view(v.shape) if len(v.shape) == 1 else mask[:, None] if len(v.shape) > 1 and len(mask.shape) == 1 else mask)
+
+                # Add beta_min to beta to prevent NaN in loss calcs
+                if k == 'beta':
+                    results[k] = torch.where(results[k] == 0, self.hparams.beta_min, results[k])
 
 
         loss_d = self.loss(results, rgbs)
