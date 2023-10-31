@@ -64,7 +64,7 @@ class PhototourismDataset(Dataset):
         test_images = images[::test_holdout]
 
         print(f"Creating {os.path.join(self.root_dir, self.exp_name)}.tsv...")
-        with open(os.path.join(self.root_dir, f"{self.exp_name}.tsv"), "w") as f:
+        with open(os.path.join(self.root_dir,'tsvs', f"{self.exp_name}.tsv"), "w") as f:
             writer = csv.writer(f, delimiter="\t")
             writer.writerow(["filename", "id", "split", "dataset"])
 
@@ -77,13 +77,13 @@ class PhototourismDataset(Dataset):
                 writer.writerow(row)
 
     def read_meta(self):
-        tsv_files = glob.glob(os.path.join(self.root_dir, "*.tsv"))
-        dataset_tsv = os.path.join(self.root_dir, f"{self.exp_name}.tsv")
+        tsv_files = glob.glob(os.path.join(self.root_dir,'tsvs', "*.tsv"))
+        dataset_tsv = os.path.join(self.root_dir,'tsvs', f"{self.exp_name}.tsv")
         if not dataset_tsv in tsv_files:
             self.create_tsv()
 
         # read all files in the tsv first (split to train and test later)
-        tsv = glob.glob(os.path.join(self.root_dir, "*.tsv"))[0]
+        tsv = glob.glob(os.path.join(self.root_dir,'tsvs', "*.tsv"))[0]
         self.scene_name = os.path.basename(tsv)[:-4]
         self.files = pd.read_csv(tsv, sep="\t")
         self.files = self.files[~self.files["id"].isnull()]  # remove data without id
@@ -199,13 +199,21 @@ class PhototourismDataset(Dataset):
             for i, id_ in enumerate(self.img_ids)
             if self.files.loc[i, "split"] == "train"
         ]
+
         self.img_ids_test = [
             id_
             for i, id_ in enumerate(self.img_ids)
             if self.files.loc[i, "split"] == "test"
         ]
+
+        self.img_ids_val = [
+            id_
+            for i, id_ in enumerate(self.img_ids)
+            if self.files.loc[i, "split"] == "val"
+        ]
         self.N_images_train = len(self.img_ids_train)
         self.N_images_test = len(self.img_ids_test)
+        self.N_images_val = len(self.img_ids_val)
 
         if self.split == "train":  # create buffer of all rays and rgb data
             if self.use_cache:
@@ -329,7 +337,8 @@ class PhototourismDataset(Dataset):
             if self.split == "val":
                 id_ = self.val_id
             else:
-                id_ = self.img_ids_train[idx]
+                #id_ = self.img_ids_train[idx]
+                id_ = idx
             sample["c2w"] = c2w = torch.FloatTensor(self.poses_dict[id_])
 
             img = Image.open(
