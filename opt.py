@@ -8,9 +8,10 @@ def get_opts():
     parser.add_argument('--dataset_name', type=str, default='blender',
                         choices=['blender', 'phototourism', 'llff'],
                         help='which dataset to train/val')
-    
+    parser.add_argument("--tsv_file", type=str, help="path to tsv file")
+
     # add mask
-    parser.add_argument('--mask_dir', type=str, default='', help='path to mask to be used')
+    parser.add_argument('--mask_path', type=str, default='', help='path to mask to be used')
     
     # for blender
     parser.add_argument('--data_perturb', nargs="+", type=str, default=[],

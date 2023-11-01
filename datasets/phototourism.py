@@ -24,7 +24,8 @@ class PhototourismDataset(Dataset):
         use_cache=False,
         exp_name="",
         white_back=False,
-        mask_dir="",
+        mask_path="",
+        **kwargs,
     ):
         """
         img_downscale: how much scale to downsample the training images.
@@ -41,8 +42,10 @@ class PhototourismDataset(Dataset):
 
         self.exp_name = exp_name
 
-        self.mask_dir = mask_dir
+        self.mask_path = mask_path
         self.mask = torch.tensor([])
+
+        self.tsv_file = kwargs.get("tsv_file", '')
 
         assert (
             img_downscale >= 1
@@ -77,15 +80,15 @@ class PhototourismDataset(Dataset):
                 writer.writerow(row)
 
     def read_meta(self):
-        tsv_files = glob.glob(os.path.join(self.root_dir,'tsvs', "*.tsv"))
-        dataset_tsv = os.path.join(self.root_dir,'tsvs', f"{self.exp_name}.tsv")
+        tsv_files = [os.path.basename(x) for x in glob.glob(os.path.join(self.root_dir,'tsvs', "*.tsv"))]
+        
+        dataset_tsv = self.tsv_file if self.tsv_file else f"{self.exp_name}.tsv"
         if not dataset_tsv in tsv_files:
             self.create_tsv()
 
         # read all files in the tsv first (split to train and test later)
-        tsv = glob.glob(os.path.join(self.root_dir,'tsvs', "*.tsv"))[0]
-        self.scene_name = os.path.basename(tsv)[:-4]
-        self.files = pd.read_csv(tsv, sep="\t")
+        self.scene_name = self.exp_name
+        self.files = pd.read_csv(os.path.join(self.root_dir, 'tsvs', dataset_tsv), sep="\t")
         self.files = self.files[~self.files["id"].isnull()]  # remove data without id
         self.files.reset_index(inplace=True, drop=True)
 
@@ -133,7 +136,7 @@ class PhototourismDataset(Dataset):
                     img_w // self.img_downscale,
                     img_h // self.img_downscale,
                 )
-                
+
                 if cam.model in ['OPENCV','OPENCV_FISHEYE','FULL_OPENCV','PINHOLE','FOV', 'THIN_PRISM']:  # radial-tangential distortion
                     K[0, 0] = cam.params[0] * img_w_ / img_w  # fx
                     K[1, 1] = cam.params[1] * img_h_ / img_h  # fy
@@ -242,8 +245,8 @@ class PhototourismDataset(Dataset):
                 self.all_masks = []
 
                 # If mask dir passed, create mask
-                if self.mask_dir:
-                    mask = Image.open(self.mask_dir).convert("L")
+                if self.mask_path:
+                    mask = Image.open(self.mask_path).convert("L")
                     mask_w, mask_h = mask.size
 
                     if self.img_downscale > 1:
@@ -356,7 +359,7 @@ class PhototourismDataset(Dataset):
                 os.path.join(self.root_dir, "images", self.image_paths[id_])
             ).convert("RGB")
 
-            if self.mask_dir:
+            if self.mask_path:
                 mask = Image.open(os.path.join(self.root_dir, "mask.png")).convert("L")
 
             img_w, img_h = img.size
@@ -366,7 +369,7 @@ class PhototourismDataset(Dataset):
                 img = img.resize((img_w, img_h), Image.LANCZOS)
                 mask = (
                     mask.resize((img_w, img_h), Image.Resampling.LANCZOS)
-                    if self.mask_dir
+                    if self.mask_path
                     else torch.ones((1, img_h, img_w))
                 )
 

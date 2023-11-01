@@ -118,7 +118,8 @@ class NeRFSystem(LightningModule):
             kwargs["val_num"] = self.hparams.num_gpus
             kwargs["use_cache"] = self.hparams.use_cache
             kwargs["exp_name"] = self.hparams.exp_name
-            kwargs["mask_dir"] = self.hparams.mask_dir
+            kwargs["mask_path"] = self.hparams.mask_path
+            kwargs["tsv_file"] = self.hparams.tsv_file
         elif self.hparams.dataset_name == "blender":
             kwargs["img_wh"] = tuple(self.hparams.img_wh)
             kwargs["perturbation"] = self.hparams.data_perturb
@@ -152,7 +153,7 @@ class NeRFSystem(LightningModule):
         rays, rgbs, ts, mask = batch["rays"], batch["rgbs"], batch["ts"], batch['mask']
         results = self(rays, ts)
 
-        if hparams.mask_dir:
+        if hparams.mask_path:
             mask = mask.cuda()
             for k,v in results.items():
                 results[k] = v * (mask.view(v.shape) if len(v.shape) == 1 else mask[:, None] if len(v.shape) > 1 and len(mask.shape) == 1 else mask)
@@ -185,7 +186,7 @@ class NeRFSystem(LightningModule):
         ts = ts.squeeze()  # (H*W)
         results = self(rays, ts)
 
-        if hparams.mask_dir:
+        if hparams.mask_path:
             mask = mask.flatten()[:,None].cuda()
 
             for k,v in results.items():
@@ -212,7 +213,7 @@ class NeRFSystem(LightningModule):
                 results[f"rgb_{typ}"].view(H, W, 3).permute(2, 0, 1).cpu()
             )  # (3, H, W)
             img_gt = rgbs.view(H, W, 3).permute(2, 0, 1).cpu()  # (3, H, W)
-            depth = visualize_depth(results[f"depth_{typ}"].view(H, W))  # (3, H, W)
+            depth = visualize_depth(results[f"depth_{typ}"].view(H, W).cpu())  # (3, H, W)
             stack = torch.stack([img_gt, img, depth])  # (3, 3, H, W)
             self.logger.experiment.add_images(
                 "val/GT_pred_depth", stack, self.global_step
