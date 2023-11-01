@@ -133,11 +133,22 @@ class PhototourismDataset(Dataset):
                     img_w // self.img_downscale,
                     img_h // self.img_downscale,
                 )
-                K[0, 0] = cam.params[0] * img_w_ / img_w  # fx
-                K[1, 1] = cam.params[0] * img_h_ / img_h  # fy
-                K[0, 2] = cam.params[1] * img_w_ / img_w  # cx
-                K[1, 2] = cam.params[2] * img_h_ / img_h  # cy
-                K[2, 2] = 1
+                
+                if cam.model in ['OPENCV','OPENCV_FISHEYE','FULL_OPENCV','PINHOLE','FOV', 'THIN_PRISM']:  # radial-tangential distortion
+                    K[0, 0] = cam.params[0] * img_w_ / img_w  # fx
+                    K[1, 1] = cam.params[1] * img_h_ / img_h  # fy
+                    K[0, 2] = cam.params[2] * img_w_ / img_w  # cx
+                    K[1, 2] = cam.params[3] * img_h_ / img_h  # cy
+                    K[2, 2] = 1
+                elif cam.model in ['RADIAL_FISHEYE', 'SIMPLE_PINHOLE','SIMPLE_RADIAL','SIMPLE_RADIAL_FISHEYE', 'RADIAL']:  # fisheye distortion
+                    K[0, 0] = cam.params[0] * img_w_ / img_w  # fx
+                    K[1, 1] = cam.params[0] * img_h_ / img_h  # fy
+                    K[0, 2] = cam.params[1] * img_w_ / img_w  # cx
+                    K[1, 2] = cam.params[2] * img_h_ / img_h  # cy
+                    K[2, 2] = 1
+                else:
+                    raise NotImplementedError(f"Camera model {cam.model} not implemented")
+                
                 self.Ks[cam_id] = K
 
         # Step 3: read c2w poses (of the images in tsv file only) and correct the order
