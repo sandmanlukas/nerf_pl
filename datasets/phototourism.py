@@ -45,14 +45,24 @@ class PhototourismDataset(Dataset):
         self.mask_path = mask_path
         self.mask = torch.tensor([])
 
-        self.tsv_file = kwargs.get("tsv_file", '')
+        self.tsv_file = kwargs.get("tsv_file", "")
+
+        # testing
+        self.poses_test = []
+        self.test_K = []
+        self.test_img_h = None
+        self.test_img_w = None
+        self.test_appearance_idx = None
 
         assert (
             img_downscale >= 1
         ), "image can only be downsampled, please set img_downscale>=1!"
+
         self.img_downscale = img_downscale
+
         if split == "val":  # image downscale=1 will cause OOM in val mode
             self.img_downscale = max(2, self.img_downscale)
+
         self.val_num = max(1, val_num)  # at least 1
         self.use_cache = use_cache
         self.define_transforms()
@@ -67,7 +77,9 @@ class PhototourismDataset(Dataset):
         test_images = images[::test_holdout]
 
         print(f"Creating {os.path.join(self.root_dir, self.exp_name)}.tsv...")
-        with open(os.path.join(self.root_dir,'tsvs', f"{self.exp_name}.tsv"), "w") as f:
+        with open(
+            os.path.join(self.root_dir, "tsvs", f"{self.exp_name}.tsv"), "w"
+        ) as f:
             writer = csv.writer(f, delimiter="\t")
             writer.writerow(["filename", "id", "split", "dataset"])
 
@@ -80,15 +92,20 @@ class PhototourismDataset(Dataset):
                 writer.writerow(row)
 
     def read_meta(self):
-        tsv_files = [os.path.basename(x) for x in glob.glob(os.path.join(self.root_dir,'tsvs', "*.tsv"))]
-        
+        tsv_files = [
+            os.path.basename(x)
+            for x in glob.glob(os.path.join(self.root_dir, "tsvs", "*.tsv"))
+        ]
+
         dataset_tsv = self.tsv_file if self.tsv_file else f"{self.exp_name}.tsv"
         if not dataset_tsv in tsv_files:
             self.create_tsv()
 
         # read all files in the tsv first (split to train and test later)
         self.scene_name = self.exp_name
-        self.files = pd.read_csv(os.path.join(self.root_dir, 'tsvs', dataset_tsv), sep="\t")
+        self.files = pd.read_csv(
+            os.path.join(self.root_dir, "tsvs", dataset_tsv), sep="\t"
+        )
         self.files = self.files[~self.files["id"].isnull()]  # remove data without id
         self.files.reset_index(inplace=True, drop=True)
 
@@ -137,21 +154,36 @@ class PhototourismDataset(Dataset):
                     img_h // self.img_downscale,
                 )
 
-                if cam.model in ['OPENCV','OPENCV_FISHEYE','FULL_OPENCV','PINHOLE','FOV', 'THIN_PRISM']:  # radial-tangential distortion
+                if cam.model in [
+                    "OPENCV",
+                    "OPENCV_FISHEYE",
+                    "FULL_OPENCV",
+                    "PINHOLE",
+                    "FOV",
+                    "THIN_PRISM",
+                ]:  # radial-tangential distortion
                     K[0, 0] = cam.params[0] * img_w_ / img_w  # fx
                     K[1, 1] = cam.params[1] * img_h_ / img_h  # fy
                     K[0, 2] = cam.params[2] * img_w_ / img_w  # cx
                     K[1, 2] = cam.params[3] * img_h_ / img_h  # cy
                     K[2, 2] = 1
-                elif cam.model in ['RADIAL_FISHEYE', 'SIMPLE_PINHOLE','SIMPLE_RADIAL','SIMPLE_RADIAL_FISHEYE', 'RADIAL']:  # fisheye distortion
+                elif cam.model in [
+                    "RADIAL_FISHEYE",
+                    "SIMPLE_PINHOLE",
+                    "SIMPLE_RADIAL",
+                    "SIMPLE_RADIAL_FISHEYE",
+                    "RADIAL",
+                ]:  # fisheye distortion
                     K[0, 0] = cam.params[0] * img_w_ / img_w  # fx
                     K[1, 1] = cam.params[0] * img_h_ / img_h  # fy
                     K[0, 2] = cam.params[1] * img_w_ / img_w  # cx
                     K[1, 2] = cam.params[2] * img_h_ / img_h  # cy
                     K[2, 2] = 1
                 else:
-                    raise NotImplementedError(f"Camera model {cam.model} not implemented")
-                
+                    raise NotImplementedError(
+                        f"Camera model {cam.model} not implemented"
+                    )
+
                 self.Ks[cam_id] = K
 
         # Step 3: read c2w poses (of the images in tsv file only) and correct the order
@@ -313,10 +345,132 @@ class PhototourismDataset(Dataset):
             "test_train",
         ]:  # use the first image as val image (also in train)
             self.val_id = self.img_ids_train[0]
+        elif self.split == "val_test":
+            self.val_id = self.img_ids_test[0]
 
         else:  # for testing, create a parametric rendering path
-            # test poses and appearance index are defined in eval.py
-            pass
+            self.all_rays_left = []
+            self.all_rays_right = []
+            self.all_rgbs_left = []
+            self.all_rgbs_right = []
+            self.all_masks_left = []
+            self.all_masks_right = []
+
+            # If mask dir passed, create mask
+            if self.mask_path:
+                mask = Image.open(self.mask_path).convert("L")
+                mask_w, mask_h = mask.size
+
+                if self.img_downscale > 1:
+                    mask_w = mask_w // self.img_downscale
+                    mask_h = mask_h // self.img_downscale
+                    mask = mask.resize((mask_w, mask_h), Image.Resampling.LANCZOS)
+                mask = self.transform(mask).to(torch.uint8)
+
+                self.mask = mask
+
+            for id_ in self.img_ids_test:
+                c2w = torch.FloatTensor(self.poses_dict[id_])
+
+                img = Image.open(
+                    os.path.join(self.root_dir, "images", self.image_paths[id_])
+                ).convert("RGB")
+
+                img_w, img_h = img.size
+
+                if self.img_downscale > 1:
+                    img_w = img_w // self.img_downscale
+                    img_h = img_h // self.img_downscale
+                    img = img.resize((img_w, img_h), Image.Resampling.LANCZOS)
+
+                img = self.transform(img)  # (3, h, w)
+
+                # Split image in left and right half
+                if len(self.mask) != 0:
+                    img = img * self.mask  # Mask image
+                    # TODO: Do we need mask_right?
+                    mask_left, mask_right = torch.split(
+                        self.mask, [img_w // 2, img_w // 2], dim=2
+                    )
+                    # Store left side of mask
+                    self.all_masks_left += [
+                        mask_left.reshape(1, -1).permute(1, 0)
+                    ]  # (h*w, 1) Grayscale
+
+                    # Store right side of mask
+                    self.all_masks_right += [
+                        mask_right.reshape(1, -1).permute(1, 0)
+                    ]  # (h*w, 1) Grayscale
+
+                img_left, img_right = torch.split(img, [img_w // 2, img_w // 2], dim=2)
+                img_left = img_left.reshape(3, -1).permute(1, 0)  # (h*w, 3) RGB
+                img_right = img_right.reshape(3, -1).permute(1, 0)  # (h*w, 3) RGB
+
+                # Store the left and right side of image
+                self.all_rgbs_left += [img_left]
+                self.all_rgbs_right += [img_right]
+
+                # calculate direction of left side of image
+                directions = get_ray_directions(
+                    img_h, img_w, self.Ks[self.image_to_cam[id_]]
+                )
+
+                rays_o_left, rays_o_right, rays_d_left, rays_d_right = get_rays(
+                    directions, c2w, test=True
+                )
+                rays_t_left = id_ * torch.ones(len(rays_o_left), 1)
+                rays_t_right = id_ * torch.ones(len(rays_o_right), 1)
+
+                self.all_rays_left += [
+                    torch.cat(
+                        [
+                            rays_o_left,
+                            rays_d_left,
+                            self.nears[id_] * torch.ones_like(rays_o_left[:, :1]),
+                            self.fars[id_] * torch.ones_like(rays_o_left[:, :1]),
+                            rays_t_left,
+                        ],
+                        1,
+                    )
+                ]  # (h*w, 9)
+
+                self.all_rays_right += [
+                    torch.cat(
+                        [
+                            rays_o_right,
+                            rays_d_right,
+                            self.nears[id_] * torch.ones_like(rays_o_right[:, :1]),
+                            self.fars[id_] * torch.ones_like(rays_o_right[:, :1]),
+                            rays_t_right,
+                        ],
+                        1,
+                    )
+                ]  # (h*w, 9)
+
+            self.all_rays_left = torch.cat(
+                self.all_rays_left, 0
+            )  # ((N_images-1)*h*w, 9)
+
+            self.all_rays_right = torch.cat(
+                self.all_rays_right, 0
+            )  # ((N_images-1)*h*w, 9)
+
+            self.all_rgbs_left = torch.cat(
+                self.all_rgbs_left, 0
+            )  # ((N_images-1)*h*w, 3)
+
+            self.all_rgbs_right = torch.cat(
+                self.all_rgbs_right, 0
+            )  # ((N_images-1)*h*w, 3)
+
+            if self.all_masks_left and self.all_masks_right:
+                self.all_masks_left = torch.cat(
+                    self.all_masks_left, 0
+                )  # ((N_images-1)*h*w,1)
+
+                self.all_masks_right = torch.cat(
+                    self.all_masks_right, 0
+                )  # ((N_images-1)*h*w,1)
 
     def define_transforms(self):
         self.transform = T.ToTensor()
@@ -326,9 +480,11 @@ class PhototourismDataset(Dataset):
             return len(self.all_rays)
         if self.split == "test_train":
             return self.N_images_train
-        if self.split == "val":
+        if self.split in ["val", "val_test"]:
             return self.val_num
-        return len(self.poses_test)
+        if self.split == "test" and len(self.poses_test):
+            return len(self.poses_test)
+        return len(self.all_rays_left)
 
     def __getitem__(self, idx):
         if self.split == "train":  # use data in the buffers
@@ -346,13 +502,15 @@ class PhototourismDataset(Dataset):
                     "rgbs": self.all_rgbs[idx],
                 }
 
-        elif self.split in ["val", "test_train"]:
+        elif self.split in ["val", "val_test", "test_train"]:
             sample = {}
-            if self.split == "val":
+
+            if self.split in ["val", "val_test"]:
                 id_ = self.val_id
             else:
-                #id_ = self.img_ids_train[idx]
+                # id_ = self.img_ids_train[idx]
                 id_ = idx
+
             sample["c2w"] = c2w = torch.FloatTensor(self.poses_dict[id_])
 
             img = Image.open(
@@ -360,13 +518,13 @@ class PhototourismDataset(Dataset):
             ).convert("RGB")
 
             if self.mask_path:
-                mask = Image.open(os.path.join(self.root_dir, "mask.png")).convert("L")
+                mask = Image.open(self.mask_path).convert("L")
 
             img_w, img_h = img.size
             if self.img_downscale > 1:
                 img_w = img_w // self.img_downscale
                 img_h = img_h // self.img_downscale
-                img = img.resize((img_w, img_h), Image.LANCZOS)
+                img = img.resize((img_w, img_h), Image.Resampling.LANCZOS)
                 mask = (
                     mask.resize((img_w, img_h), Image.Resampling.LANCZOS)
                     if self.mask_path
@@ -377,11 +535,14 @@ class PhototourismDataset(Dataset):
             mask = (
                 mask if torch.is_tensor(mask) else self.transform(mask).to(torch.uint8)
             )
+
+            self.mask = mask
+
             img = img * mask
 
-            # valid_mask = mask
             valid_mask = (img[-1] > 0).flatten()
             img = img.view(3, -1).permute(1, 0)  # (h*w, 3) RGB
+
             sample["rgbs"] = img
             sample["mask"] = mask
 
@@ -389,6 +550,7 @@ class PhototourismDataset(Dataset):
                 img_h, img_w, self.Ks[self.image_to_cam[id_]]
             )
             rays_o, rays_d = get_rays(directions, c2w)
+
             rays = torch.cat(
                 [
                     rays_o,
@@ -398,32 +560,56 @@ class PhototourismDataset(Dataset):
                 ],
                 1,
             )  # (h*w, 8)
+
             sample["rays"] = rays
             sample["ts"] = id_ * torch.ones(len(rays), dtype=torch.long)
             sample["img_wh"] = torch.LongTensor([img_w, img_h])
             sample["valid_mask"] = valid_mask
 
         else:
-            sample = {}
-            sample["c2w"] = c2w = torch.FloatTensor(self.poses_test[idx])
-            directions = get_ray_directions(
-                self.test_img_h, self.test_img_w, self.test_K
-            )
-            rays_o, rays_d = get_rays(directions, c2w)
-            near, far = 0, 5
-            rays = torch.cat(
-                [
-                    rays_o,
-                    rays_d,
-                    near * torch.ones_like(rays_o[:, :1]),
-                    far * torch.ones_like(rays_o[:, :1]),
-                ],
-                1,
-            )
-            sample["rays"] = rays
-            sample["ts"] = self.test_appearance_idx * torch.ones(
-                len(rays), dtype=torch.long
-            )
-            sample["img_wh"] = torch.LongTensor([self.test_img_w, self.test_img_h])
+            # if generate novel views
+            if (
+                np.any(self.test_K)
+                and self.test_img_h
+                and self.test_img_w
+                and self.test_appearance_idx
+            ):
+                sample = {}
+                sample["c2w"] = c2w = torch.FloatTensor(self.poses_test[idx])
+                directions = get_ray_directions(
+                    self.test_img_h, self.test_img_w, self.test_K
+                )
+                rays_o, rays_d = get_rays(directions, c2w)
+                near, far = 0, 5
+
+                rays = torch.cat(
+                    [
+                        rays_o,
+                        rays_d,
+                        near * torch.ones_like(rays_o[:, :1]),
+                        far * torch.ones_like(rays_o[:, :1]),
+                    ],
+                    1,
+                )
+
+                sample["rays"] = rays
+                sample["ts"] = self.test_appearance_idx * torch.ones(
+                    len(rays), dtype=torch.long
+                )
+
+                sample["img_wh"] = torch.LongTensor([self.test_img_w, self.test_img_h])
+            else:
+                sample = {
+                    "rays_left": self.all_rays_left[idx, :8],
+                    "rays_right": self.all_rays_right[idx, :8],
+                    "ts_left": self.all_rays_left[idx, 8].long(),
+                    "ts_right": self.all_rays_right[idx, 8].long(),
+                    "rgbs_left": self.all_rgbs_left[idx],
+                    "rgbs_right": self.all_rgbs_right[idx],
+                }
+
+                if len(self.mask) != 0:
+                    sample["mask_left"] = self.all_masks_left[idx]
+                    sample["mask_right"] = self.all_masks_right[idx]
 
         return sample
