@@ -54,10 +54,14 @@ class NeRFSystem(LightningModule):
             self.embedding_a = torch.nn.Embedding(hparams.N_vocab, hparams.N_a)
             self.embeddings["a"] = self.embedding_a
             self.models_to_train += [self.embedding_a]
+
         if hparams.encode_t:
             self.embedding_t = torch.nn.Embedding(hparams.N_vocab, hparams.N_tau)
             self.embeddings["t"] = self.embedding_t
             self.models_to_train += [self.embedding_t]
+
+            if hparams.test:
+                load_ckpt(self.embeddings["t"], hparams.ckpt_path, model_name="embedding_t")
 
         self.nerf_coarse = NeRF(
             "coarse",
@@ -65,6 +69,10 @@ class NeRFSystem(LightningModule):
             in_channels_dir=6 * hparams.N_emb_dir + 3,
             encode_appearance=hparams.encode_a,
         )
+
+        if hparams.test:
+            load_ckpt(self.nerf_coarse, hparams.ckpt_path, model_name="nerf_coarse")
+
         self.models = {"coarse": self.nerf_coarse}
         if hparams.N_importance > 0:
             self.nerf_fine = NeRF(
@@ -77,15 +85,19 @@ class NeRFSystem(LightningModule):
                 in_channels_t=hparams.N_tau,
                 beta_min=hparams.beta_min,
             )
+
+            if hparams.test:
+                load_ckpt(self.nerf_fine, hparams.ckpt_path, model_name="nerf_fine")
+
             self.models["fine"] = self.nerf_fine
         self.models_to_train += [self.models]
 
         # Freeze all params except appearance embeddings
         # appearance embeddings are at index 0 in self.models_to_train
-        # if hparams.test and hparams.encode_a:
-        #     params = get_parameters(self.models_to_train[1:])
-        #     for param in params:
-        #         param.requires_grad = False
+        if hparams.test and hparams.encode_a:
+            params = get_parameters(self.models_to_train[1:])
+            for param in params:
+                param.requires_grad = False
 
     def define_transforms(self):
         self.transform = T.ToTensor()
@@ -201,15 +213,15 @@ class NeRFSystem(LightningModule):
         with torch.no_grad():
             typ = "fine" if "rgb_fine" in results else "coarse"
             psnr_ = psnr(results[f"rgb_{typ}"], rgbs)
-            valid_mask = mask != 0 if mask is not None else None
-            psnr_unmasked = psnr(results[f"rgb_{typ}"], rgbs, valid_mask=valid_mask)
+            # valid_mask = mask != 0 if mask is not None else None
+            # psnr_unmasked = psnr(results[f"rgb_{typ}"], rgbs, valid_mask=valid_mask)
 
         self.log("lr", get_learning_rate(self.optimizer))
         self.log("train/loss", loss)
         for k, v in loss_d.items():
             self.log(f"train/{k}", v, prog_bar=True)
         self.log("train/psnr", psnr_, prog_bar=True)
-        self.log("train/psnr_unmasked", psnr_unmasked, prog_bar=True)
+        # self.log("train/psnr_unmasked", psnr_unmasked, prog_bar=True)
 
         return loss
 
@@ -296,7 +308,7 @@ class NeRFSystem(LightningModule):
 
         psnr_ = psnr(results[f"rgb_{typ}"], rgbs)
         with torch.no_grad():
-            valid_mask = mask != 0 if mask is not None else None
+            valid_mask = (mask != 0).repeat(1, 3) if mask is not None else None
             psnr_unmasked = psnr(results[f"rgb_{typ}"], rgbs, valid_mask=valid_mask)
             log["val_psnr_unmasked"] = psnr_unmasked
 
@@ -358,7 +370,7 @@ def main(hparams):
 
     last_ckpt = glob.glob(os.path.join("ckpts", f"{hparams.exp_name}", "last.ckpt"))
 
-    if hparams.ckpt_path:
+    if hparams.ckpt_path and not hparams.test:
         ckpt_path = hparams.ckpt_path
     else:
         ckpt_path = last_ckpt[0] if last_ckpt else None

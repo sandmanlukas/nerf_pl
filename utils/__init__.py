@@ -30,33 +30,37 @@ def get_optimizer(hparams, models):
     parameters = get_parameters(models)
 
     #TODO: Check this, can't load ckpt since model arch is new.
-    if hparams.test and hparams.encode_a:
-        parameters = get_parameters(models[:1]) 
+    # if hparams.test and hparams.encode_a:
+    #     parameters = parameters[:1]
         
     if hparams.optimizer == "sgd":
         optimizer = SGD(
-            filter(lambda p: p.requires_grad, parameters),
+            # filter(lambda p: p.requires_grad, parameters),
+            parameters,
             lr=hparams.lr,
             momentum=hparams.momentum,
             weight_decay=hparams.weight_decay,
         )
     elif hparams.optimizer == "adam":
         optimizer = Adam(
-            filter(lambda p: p.requires_grad, parameters),
+            # filter(lambda p: p.requires_grad, parameters),
+            parameters,
             lr=hparams.lr,
             eps=eps,
             weight_decay=hparams.weight_decay,
         )
     elif hparams.optimizer == "radam":
         optimizer = optim.RAdam(
-            filter(lambda p: p.requires_grad, parameters),
+            # filter(lambda p: p.requires_grad, parameters),
+            parameters,
             lr=hparams.lr,
             eps=eps,
             weight_decay=hparams.weight_decay,
         )
     elif hparams.optimizer == "ranger":
         optimizer = optim.Ranger(
-            filter(lambda p: p.requires_grad, parameters),
+            # filter(lambda p: p.requires_grad, parameters),
+            parameters,
             lr=hparams.lr,
             eps=eps,
             weight_decay=hparams.weight_decay,
