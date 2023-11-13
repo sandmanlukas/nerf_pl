@@ -80,6 +80,13 @@ class NeRFSystem(LightningModule):
             self.models["fine"] = self.nerf_fine
         self.models_to_train += [self.models]
 
+        # Freeze all params except appearance embeddings
+        # appearance embeddings are at index 0 in self.models_to_train
+        # if hparams.test and hparams.encode_a:
+        #     params = get_parameters(self.models_to_train[1:])
+        #     for param in params:
+        #         param.requires_grad = False
+
     def define_transforms(self):
         self.transform = T.ToTensor()
 
@@ -194,12 +201,15 @@ class NeRFSystem(LightningModule):
         with torch.no_grad():
             typ = "fine" if "rgb_fine" in results else "coarse"
             psnr_ = psnr(results[f"rgb_{typ}"], rgbs)
+            valid_mask = mask != 0 if mask is not None else None
+            psnr_unmasked = psnr(results[f"rgb_{typ}"], rgbs, valid_mask=valid_mask)
 
         self.log("lr", get_learning_rate(self.optimizer))
         self.log("train/loss", loss)
         for k, v in loss_d.items():
             self.log(f"train/{k}", v, prog_bar=True)
         self.log("train/psnr", psnr_, prog_bar=True)
+        self.log("train/psnr_unmasked", psnr_unmasked, prog_bar=True)
 
         return loss
 
@@ -285,6 +295,11 @@ class NeRFSystem(LightningModule):
             )
 
         psnr_ = psnr(results[f"rgb_{typ}"], rgbs)
+        with torch.no_grad():
+            valid_mask = mask != 0 if mask is not None else None
+            psnr_unmasked = psnr(results[f"rgb_{typ}"], rgbs, valid_mask=valid_mask)
+            log["val_psnr_unmasked"] = psnr_unmasked
+
         self.validation_step_psnr.append(psnr_)
         log["val_psnr"] = psnr_
 
