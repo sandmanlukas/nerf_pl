@@ -29,10 +29,6 @@ def get_optimizer(hparams, models):
     eps = 1e-8
     parameters = get_parameters(models)
 
-    #TODO: Check this, can't load ckpt since model arch is new.
-    # if hparams.test and hparams.encode_a:
-    #     parameters = parameters[:1]
-        
     if hparams.optimizer == "sgd":
         optimizer = SGD(
             # filter(lambda p: p.requires_grad, parameters),
