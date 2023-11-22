@@ -182,8 +182,8 @@ class NeRFSystem(LightningModule):
 
     def training_step(self, batch, batch_nb):
         if hparams.test:
-            rays, rgbs, ts = batch["rays_left"], batch["rgbs_left"], batch["ts_left"]
-            mask = batch["mask_left"] if "mask_left" in batch else None
+            rays, rgbs, ts = batch["rays_top"], batch["rgbs_top"], batch["ts_top"]
+            mask = batch["mask_top"] if "mask_top" in batch else None
         else:
             rays, rgbs, ts = batch["rays"], batch["rgbs"], batch["ts"]
             mask = batch["mask"] if "mask" in batch else None
@@ -239,10 +239,10 @@ class NeRFSystem(LightningModule):
             rgbs = rgbs.view(1, img_h, img_w, -1)
             ts = ts.view(1, img_h, img_w, -1)
 
-            # split into two, train/val on left half
-            rays, _ = torch.split(rays, [img_w // 2, img_w // 2], dim=2)
-            rgbs, _ = torch.split(rgbs, [img_w // 2, img_w // 2], dim=2)
-            ts, _ = torch.split(ts, [img_w // 2, img_w // 2], dim=2)
+            # split into two, train/val on top half
+            rays, _ = torch.split(rays, [img_h // 2, img_h // 2], dim=1)
+            rgbs, _ = torch.split(rgbs, [img_h // 2, img_h // 2], dim=1)
+            ts, _ = torch.split(ts, [img_h // 2, img_h // 2], dim=1)
 
             # reshape back to original shape
             rays = rays.reshape(rays.shape[0], -1, rays.shape[-1])
@@ -251,7 +251,7 @@ class NeRFSystem(LightningModule):
 
             if mask is not None:
                 mask = mask.view(1, img_h, img_w, -1)
-                mask, mask_right = torch.split(mask, [img_w // 2, img_w // 2], dim=2)
+                mask, mask_bottom = torch.split(mask, [img_h // 2, img_h // 2], dim=1)
                 mask = mask.reshape(mask.shape[0], -1, mask.shape[-1])
 
         rays = rays.squeeze()  # (H*W, 8)
@@ -291,7 +291,7 @@ class NeRFSystem(LightningModule):
                 W, H = WH[0, 0].item(), WH[0, 1].item()
                 
                 if hparams.test:
-                    W = W // 2
+                    H = H // 2
             else:
                 W, H = self.hparams.img_wh
             img = (

@@ -55,21 +55,21 @@ def get_rays(directions, c2w, test=False):
 
         return rays_o, rays_d
     else:
-        img_w = directions.shape[1]
+        img_h = directions.shape[0]
 
-        # Split rays into left and right for testing
-        rays_d_left, rays_d_right = torch.split(rays_d, [img_w // 2, img_w // 2], dim=1)
-        rays_o_left, rays_o_right = torch.split(rays_o, [img_w // 2, img_w // 2], dim=1)
+        # Split rays into top and bottom for testing
+        rays_d_top, rays_d_bottom = torch.split(rays_d, [img_h // 2, img_h // 2], dim=0)
+        rays_o_top, rays_o_bottom = torch.split(rays_o, [img_h // 2, img_h // 2], dim=0)
 
         # Reshape directions and origins
-        rays_d_left = rays_d_left.reshape(-1, 3)
-        rays_d_right = rays_d_right.reshape(-1, 3)
+        rays_d_top = rays_d_top.reshape(-1, 3)
+        rays_d_bottom = rays_d_bottom.reshape(-1, 3)
 
-        rays_o_left = rays_o_left.reshape(-1, 3)
-        rays_o_right = rays_o_right.reshape(-1, 3)
+        rays_o_top = rays_o_top.reshape(-1, 3)
+        rays_o_bottom = rays_o_bottom.reshape(-1, 3)
 
         # Return left and right rays of origin, left and right of directions
-        return rays_o_left, rays_o_right, rays_d_left, rays_d_right
+        return rays_o_top, rays_o_bottom, rays_d_top, rays_d_bottom
 
 
 def get_ndc_rays(H, W, focal, near, rays_o, rays_d):

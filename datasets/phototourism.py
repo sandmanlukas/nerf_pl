@@ -349,12 +349,14 @@ class PhototourismDataset(Dataset):
             self.val_id = self.img_ids_test[0]
 
         else:  # for testing, create a parametric rendering path
-            self.all_rays_left = []
-            self.all_rays_right = []
-            self.all_rgbs_left = []
-            self.all_rgbs_right = []
-            self.all_masks_left = []
-            self.all_masks_right = []
+            self.all_rays_top = []
+            self.all_rays_bottom = []
+
+            self.all_rgbs_top = []
+            self.all_rgbs_bottom = []
+
+            self.all_masks_top = []
+            self.all_masks_bottom = []
 
             # If mask dir passed, create mask
             if self.mask_path:
@@ -389,87 +391,87 @@ class PhototourismDataset(Dataset):
                 if len(self.mask) != 0:
                     img = img * self.mask  # Mask image
                     # TODO: Do we need mask_right?
-                    mask_left, mask_right = torch.split(
-                        self.mask, [img_w // 2, img_w // 2], dim=2
+                    mask_top, mask_bottom = torch.split(
+                        self.mask, [img_h // 2, img_h // 2], dim=1
                     )
-                    # Store left side of mask
-                    self.all_masks_left += [
-                        mask_left.reshape(1, -1).permute(1, 0)
+                    # Store top side of mask
+                    self.all_masks_top += [
+                        mask_top.reshape(1, -1).permute(1, 0)
                     ]  # (h*w, 1) Grayscale
 
-                    # Store right side of mask
-                    self.all_masks_right += [
-                        mask_right.reshape(1, -1).permute(1, 0)
+                    # Store bottom side of mask
+                    self.all_masks_bottom += [
+                        mask_bottom.reshape(1, -1).permute(1, 0)
                     ]  # (h*w, 1) Grayscale
 
-                img_left, img_right = torch.split(img, [img_w // 2, img_w // 2], dim=2)
-                img_left = img_left.reshape(3, -1).permute(1, 0)  # (h*w, 3) RGB
-                img_right = img_right.reshape(3, -1).permute(1, 0)  # (h*w, 3) RGB
+                img_top, img_bottom = torch.split(img, [img_h // 2, img_h // 2], dim=1)
+                img_top = img_top.reshape(3, -1).permute(1, 0)  # (h*w, 3) RGB
+                img_bottom = img_bottom.reshape(3, -1).permute(1, 0)  # (h*w, 3) RGB
 
                 # Store the left and right side of image
-                self.all_rgbs_left += [img_left]
-                self.all_rgbs_right += [img_right]
+                self.all_rgbs_top += [img_top]
+                self.all_rgbs_bottom += [img_bottom]
 
                 # calculate direction of left side of image
                 directions = get_ray_directions(
                     img_h, img_w, self.Ks[self.image_to_cam[id_]]
                 )
 
-                rays_o_left, rays_o_right, rays_d_left, rays_d_right = get_rays(
+                rays_o_top, rays_o_bottom, rays_d_top, rays_d_bottom = get_rays(
                     directions, c2w, test=True
                 )
-                rays_t_left = id_ * torch.ones(len(rays_o_left), 1)
-                rays_t_right = id_ * torch.ones(len(rays_o_right), 1)
+                rays_t_top = id_ * torch.ones(len(rays_o_top), 1)
+                rays_t_bottom = id_ * torch.ones(len(rays_o_bottom), 1)
 
-                self.all_rays_left += [
+                self.all_rays_top += [
                     torch.cat(
                         [
-                            rays_o_left,
-                            rays_d_left,
-                            self.nears[id_] * torch.ones_like(rays_o_left[:, :1]),
-                            self.fars[id_] * torch.ones_like(rays_o_left[:, :1]),
-                            rays_t_left,
+                            rays_o_top,
+                            rays_d_top,
+                            self.nears[id_] * torch.ones_like(rays_o_top[:, :1]),
+                            self.fars[id_] * torch.ones_like(rays_o_top[:, :1]),
+                            rays_t_top,
                         ],
                         1,
                     )
                 ]  # (h*w, 9)
 
-                self.all_rays_right += [
+                self.all_rays_bottom += [
                     torch.cat(
                         [
-                            rays_o_right,
-                            rays_d_right,
-                            self.nears[id_] * torch.ones_like(rays_o_right[:, :1]),
-                            self.fars[id_] * torch.ones_like(rays_o_right[:, :1]),
-                            rays_t_right,
+                            rays_o_bottom,
+                            rays_d_bottom,
+                            self.nears[id_] * torch.ones_like(rays_o_bottom[:, :1]),
+                            self.fars[id_] * torch.ones_like(rays_o_bottom[:, :1]),
+                            rays_t_bottom,
                         ],
                         1,
                     )
                 ]  # (h*w, 9)
 
-            self.all_rays_left = torch.cat(
-                self.all_rays_left, 0
+            self.all_rays_top = torch.cat(
+                self.all_rays_top, 0
             )  # ((N_images-1)*h*w, 9)
 
-            self.all_rays_right = torch.cat(
-                self.all_rays_right, 0
+            self.all_rays_bottom = torch.cat(
+                self.all_rays_bottom, 0
             )  # ((N_images-1)*h*w, 9)
 
-            self.all_rgbs_left = torch.cat(
-                self.all_rgbs_left, 0
+            self.all_rgbs_top = torch.cat(
+                self.all_rgbs_top, 0
             )  # ((N_images-1)*h*w, 3)
 
-            self.all_rgbs_right = torch.cat(
-                self.all_rgbs_right, 0
+            self.all_rgbs_bottom = torch.cat(
+                self.all_rgbs_bottom, 0
             )  # ((N_images-1)*h*w, 3)
 
-            if self.all_masks_left and self.all_masks_right:
-                self.all_masks_left = torch.cat(
-                    self.all_masks_left, 0
+            if self.all_masks_top and self.all_masks_bottom:
+                self.all_masks_top = torch.cat(
+                    self.all_masks_top, 0
                 )  # ((N_images-1)*h*w,1)
 
-                self.all_masks_right = torch.cat(
-                    self.all_masks_right, 0
+                self.all_masks_bottom = torch.cat(
+                    self.all_masks_bottom, 0
                 )  # ((N_images-1)*h*w,1)
 
     def define_transforms(self):
@@ -484,7 +486,7 @@ class PhototourismDataset(Dataset):
             return self.val_num
         if self.split == "test" and len(self.poses_test):
             return len(self.poses_test)
-        return len(self.all_rays_left)
+        return len(self.all_rays_top)
 
     def __getitem__(self, idx):
         if self.split == "train":  # use data in the buffers
@@ -600,16 +602,16 @@ class PhototourismDataset(Dataset):
                 sample["img_wh"] = torch.LongTensor([self.test_img_w, self.test_img_h])
             else:
                 sample = {
-                    "rays_left": self.all_rays_left[idx, :8],
-                    "rays_right": self.all_rays_right[idx, :8],
-                    "ts_left": self.all_rays_left[idx, 8].long(),
-                    "ts_right": self.all_rays_right[idx, 8].long(),
-                    "rgbs_left": self.all_rgbs_left[idx],
-                    "rgbs_right": self.all_rgbs_right[idx],
+                    "rays_top": self.all_rays_top[idx, :8],
+                    "rays_bottom": self.all_rays_bottom[idx, :8],
+                    "ts_top": self.all_rays_top[idx, 8].long(),
+                    "ts_bottom": self.all_rays_bottom[idx, 8].long(),
+                    "rgbs_top": self.all_rgbs_top[idx],
+                    "rgbs_bottom": self.all_rgbs_bottom[idx],
                 }
 
                 if len(self.mask) != 0:
-                    sample["mask_left"] = self.all_masks_left[idx]
-                    sample["mask_right"] = self.all_masks_right[idx]
+                    sample["mask_top"] = self.all_masks_top[idx]
+                    sample["mask_bottom"] = self.all_masks_bottom[idx]
 
         return sample
