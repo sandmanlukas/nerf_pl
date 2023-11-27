@@ -2,14 +2,15 @@ import torch
 from kornia import create_meshgrid
 
 
-def get_ray_directions(H, W, focal):
+def get_ray_directions(H, W, K):
     """
     Get ray directions for all pixels in camera coordinate.
     Reference: https://www.scratchapixel.com/lessons/3d-basic-rendering/
                ray-tracing-generating-camera-rays/standard-coordinate-systems
 
     Inputs:
-        H, W, focal: image height, width and focal length
+        H, W: image height and width
+        K: (3, 3) camera intrinsics
 
     Outputs:
         directions: (H, W, 3), the direction of the rays in camera coordinate
@@ -18,13 +19,16 @@ def get_ray_directions(H, W, focal):
     i, j = grid.unbind(-1)
     # the direction here is without +0.5 pixel centering as calibration is not so accurate
     # see https://github.com/bmild/nerf/issues/24
-    directions = \
-        torch.stack([(i-W/2)/focal, -(j-H/2)/focal, -torch.ones_like(i)], -1) # (H, W, 3)
+
+    fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
+    directions = torch.stack(
+        [(i - cx) / fx, -(j - cy) / fy, -torch.ones_like(i)], -1
+    )  # (H, W, 3)
 
     return directions
 
 
-def get_rays(directions, c2w):
+def get_rays(directions, c2w, test=False):
     """
     Get ray origin and normalized directions in world coordinate for all pixels in one image.
     Reference: https://www.scratchapixel.com/lessons/3d-basic-rendering/
@@ -39,15 +43,33 @@ def get_rays(directions, c2w):
         rays_d: (H*W, 3), the normalized direction of the rays in world coordinate
     """
     # Rotate ray directions from camera coordinate to the world coordinate
-    rays_d = directions @ c2w[:, :3].T # (H, W, 3)
+    rays_d = directions @ c2w[:, :3].T  # (H, W, 3)
     rays_d = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
     # The origin of all rays is the camera origin in world coordinate
-    rays_o = c2w[:, 3].expand(rays_d.shape) # (H, W, 3)
+    rays_o = c2w[:, 3].expand(rays_d.shape)  # (H, W, 3)
 
-    rays_d = rays_d.view(-1, 3)
-    rays_o = rays_o.view(-1, 3)
+    if not test:
+        # return rays_o and rays_d normally
+        rays_d = rays_d.view(-1, 3)
+        rays_o = rays_o.view(-1, 3)
 
-    return rays_o, rays_d
+        return rays_o, rays_d
+    else:
+        img_h = directions.shape[0]
+
+        # Split rays into top and bottom for testing
+        rays_d_top, rays_d_bottom = torch.split(rays_d, [img_h // 2, img_h // 2], dim=0)
+        rays_o_top, rays_o_bottom = torch.split(rays_o, [img_h // 2, img_h // 2], dim=0)
+
+        # Reshape directions and origins
+        rays_d_top = rays_d_top.reshape(-1, 3)
+        rays_d_bottom = rays_d_bottom.reshape(-1, 3)
+
+        rays_o_top = rays_o_top.reshape(-1, 3)
+        rays_o_bottom = rays_o_bottom.reshape(-1, 3)
+
+        # Return left and right rays of origin, left and right of directions
+        return rays_o_top, rays_o_bottom, rays_d_top, rays_d_bottom
 
 
 def get_ndc_rays(H, W, focal, near, rays_o, rays_d):
@@ -72,23 +94,23 @@ def get_ndc_rays(H, W, focal, near, rays_o, rays_d):
         rays_d: (N_rays, 3), the direction of the rays in NDC
     """
     # Shift ray origins to near plane
-    t = -(near + rays_o[...,2]) / rays_d[...,2]
-    rays_o = rays_o + t[...,None] * rays_d
+    t = -(near + rays_o[..., 2]) / rays_d[..., 2]
+    rays_o = rays_o + t[..., None] * rays_d
 
     # Store some intermediate homogeneous results
-    ox_oz = rays_o[...,0] / rays_o[...,2]
-    oy_oz = rays_o[...,1] / rays_o[...,2]
-    
-    # Projection
-    o0 = -1./(W/(2.*focal)) * ox_oz
-    o1 = -1./(H/(2.*focal)) * oy_oz
-    o2 = 1. + 2. * near / rays_o[...,2]
+    ox_oz = rays_o[..., 0] / rays_o[..., 2]
+    oy_oz = rays_o[..., 1] / rays_o[..., 2]
 
-    d0 = -1./(W/(2.*focal)) * (rays_d[...,0]/rays_d[...,2] - ox_oz)
-    d1 = -1./(H/(2.*focal)) * (rays_d[...,1]/rays_d[...,2] - oy_oz)
+    # Projection
+    o0 = -1.0 / (W / (2.0 * focal)) * ox_oz
+    o1 = -1.0 / (H / (2.0 * focal)) * oy_oz
+    o2 = 1.0 + 2.0 * near / rays_o[..., 2]
+
+    d0 = -1.0 / (W / (2.0 * focal)) * (rays_d[..., 0] / rays_d[..., 2] - ox_oz)
+    d1 = -1.0 / (H / (2.0 * focal)) * (rays_d[..., 1] / rays_d[..., 2] - oy_oz)
     d2 = 1 - o2
-    
-    rays_o = torch.stack([o0, o1, o2], -1) # (B, 3)
-    rays_d = torch.stack([d0, d1, d2], -1) # (B, 3)
-    
+
+    rays_o = torch.stack([o0, o1, o2], -1)  # (B, 3)
+    rays_d = torch.stack([d0, d1, d2], -1)  # (B, 3)
+
     return rays_o, rays_d

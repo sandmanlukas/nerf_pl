@@ -7,7 +7,7 @@ def visualize_depth(depth, cmap=cv2.COLORMAP_JET):
     """
     depth: (H, W)
     """
-    x = depth.cpu().numpy()
+    x = depth
     x = np.nan_to_num(x) # change nan to 0
     mi = np.min(x) # get minimum depth
     ma = np.max(x)
