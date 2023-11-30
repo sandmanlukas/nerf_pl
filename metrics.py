@@ -3,7 +3,7 @@ import numpy as np
 from kornia.losses import ssim as dssim
 import lpips
 
-loss_fn_alex = lpips.LPIPS(net='vgg') # best forward scores
+loss_fn_vgg = lpips.LPIPS(net='vgg') # best forward scores
 
 
 def mse(image_pred, image_gt, valid_mask=None, reduction='mean'):
@@ -41,4 +41,4 @@ def lpips_score(image_pred, image_gt):
     rgb_lpips = lpips.im2tensor(normalize_negative_one(image_pred.cpu().numpy()))
     gt_lpips = lpips.im2tensor(normalize_negative_one(image_gt))
 
-    return loss_fn_alex(rgb_lpips, gt_lpips)
+    return loss_fn_vgg(rgb_lpips, gt_lpips)
