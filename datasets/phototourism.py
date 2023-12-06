@@ -390,7 +390,6 @@ class PhototourismDataset(Dataset):
                 # Split image in left and right half
                 if len(self.mask) != 0:
                     img = img * self.mask  # Mask image
-                    # TODO: Do we need mask_right?
                     mask_top, mask_bottom = torch.split(
                         self.mask, [img_h // 2, img_h // 2], dim=1
                     )
